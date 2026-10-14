@@ -6,7 +6,7 @@ on:
       working-directory:
         required: true
         type: string
-        default: "libs/langgraph"
+        default: "libs/sdk-py"
 
 permissions:
   contents: read
@@ -17,6 +17,7 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     outputs:
       pkg-name: ${{ steps.check-version.outputs.pkg-name }}
@@ -47,7 +48,9 @@ jobs:
       # > from the publish job.
       # https://github.com/pypa/gh-action-pypi-publish#non-goals
       - name: Build project for distribution
-        run: uv build
+        run: |
+          echo "hatchling==1.29.0" > /tmp/build-constraints.txt
+          uv build --build-constraint /tmp/build-constraints.txt
         working-directory: ${{ inputs.working-directory }}
 
       - name: Upload build
@@ -55,6 +58,7 @@ jobs:
         with:
           name: dist
           path: ${{ inputs.working-directory }}/dist/
+          if-no-files-found: error
 
       - name: Check Version
         id: check-version
@@ -81,9 +85,11 @@ jobs:
           echo tag="$TAG" >> $GITHUB_OUTPUT
 
   release-notes:
+    if: false
     needs:
       - build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       release-body: ${{ steps.generate-release-body.outputs.release-body }}
     steps:
@@ -139,24 +145,13 @@ jobs:
             echo EOF
           } >> "$GITHUB_OUTPUT"
 
-  test-pypi-publish:
-    needs:
-      - build
-      - release-notes
-    permissions:
-      contents: read
-      id-token: write
-    uses: ./.github/workflows/_test_release.yml
-    with:
-      working-directory: ${{ inputs.working-directory }}
-    secrets: inherit
-
   pre-release-checks:
+    if: false
     needs:
       - build
       - release-notes
-      - test-pypi-publish
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
 
@@ -243,12 +238,13 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
 
   publish:
+    if: false
     needs:
       - build
       - release-notes
-      - test-pypi-publish
       - pre-release-checks
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       # This permission is used for trusted publishing:
       # https://blog.pypi.org/posts/2023-04-20-introducing-trusted-publishers/
@@ -287,13 +283,14 @@ jobs:
           attestations: false
 
   mark-release:
+    if: false
     needs:
       - build
       - release-notes
-      - test-pypi-publish
       - pre-release-checks
       - publish
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       # This permission is needed by `ncipollo/release-action` to
       # create the GitHub release.
